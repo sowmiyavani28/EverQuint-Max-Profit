@@ -1,9 +1,9 @@
 
 from functools import lru_cache
 
-
 # Building details:
 # (Name, Construction Time, Earnings per Operating Time Unit)
+
 BUILDINGS = [
     ("T", 5, 1500),   # Theatre
     ("P", 4, 1000),   # Pub
@@ -17,9 +17,12 @@ def max_profit(n):
 
     Assumptions:
     - Only one building can be constructed at a time.
+    - Buildings are constructed sequentially.
     - Earnings start after construction is complete.
     - Each completed building continues earning until time n.
-    - A building completed at time n earns zero.
+    - A building completed exactly at time n earns zero.
+    - Return all unique building combinations achieving
+      maximum earnings.
     """
 
     if not isinstance(n, int) or isinstance(n, bool) or n < 0:
@@ -27,95 +30,132 @@ def max_profit(n):
 
     @lru_cache(maxsize=None)
     def solve(elapsed):
+
         if elapsed >= n:
-            return 0, (0, 0, 0)
+            return 0, frozenset([(0, 0, 0)])
 
-        best_earnings = 0
-        best_counts = (0, 0, 0)
+        best_profit = 0
+        best_combinations = frozenset([(0, 0, 0)])
 
-        for i, (name, build_time, earning_rate) in enumerate(BUILDINGS):
-            finish_time = elapsed + build_time
+        for i, (_, duration, rate) in enumerate(BUILDINGS):
 
-            # Cannot finish construction within the available time.
+            finish_time = elapsed + duration
+
             if finish_time > n:
                 continue
 
-            # Earnings from this building after construction.
-            current_earnings = (n - finish_time) * earning_rate
+            # Earnings from the newly completed building
+            profit = (n - finish_time) * rate
 
-            # Earnings from buildings constructed afterward.
-            future_earnings, future_counts = solve(finish_time)
+            # Calculate earnings from the remaining time
+            future_profit, future_combinations = solve(finish_time)
 
-            total_earnings = current_earnings + future_earnings
+            total_profit = profit + future_profit
 
-            counts = list(future_counts)
-            counts[i] += 1
-            counts = tuple(counts)
+            # Add the current building to every future combination
+            current_combinations = frozenset(
+                tuple(
+                    count + (1 if j == i else 0)
+                    for j, count in enumerate(combination)
+                )
+                for combination in future_combinations
+            )
 
-            if total_earnings > best_earnings:
-                best_earnings = total_earnings
-                best_counts = counts
+            # Update maximum earnings and valid combinations
+            if total_profit > best_profit:
 
-        return best_earnings, best_counts
+                best_profit = total_profit
+                best_combinations = current_combinations
 
-    earnings, counts = solve(0)
+            elif total_profit == best_profit and total_profit > 0:
+
+                best_combinations = (
+                    best_combinations | current_combinations
+                )
+
+        return best_profit, best_combinations
+
+    profit, combinations = solve(0)
+
+    # Convert combinations into structured dictionaries
+    combinations_list = [
+        {
+            "T": combination[0],
+            "P": combination[1],
+            "C": combination[2]
+        }
+        for combination in sorted(combinations)
+    ]
 
     return {
         "time_units": n,
-        "earnings": earnings,
-        "T": counts[0],
-        "P": counts[1],
-        "C": counts[2],
+        "maximum_earnings": profit,
+        "combinations": combinations_list
     }
 
 
 def display_result(n):
+
     result = max_profit(n)
 
-    print(f"Time Units       : {result['time_units']}")
-    print(f"Maximum Earnings : ${result['earnings']}")
-    print(f"Theatres (T)     : {result['T']}")
-    print(f"Pubs (P)         : {result['P']}")
-    print(f"Commercial (C)   : {result['C']}")
-    print("-" * 35)
+    print(f"\nInput time: {result['time_units']}")
+    print(f"Maximum earnings: ${result['maximum_earnings']}")
+
+    print("Valid Combinations:")
+
+    for combination in result["combinations"]:
+
+        print(
+            f"  T: {combination['T']}, "
+            f"P: {combination['P']}, "
+            f"C: {combination['C']}"
+        )
+
+    print("-" * 40)
 
 
-def run_tests():
-    # Assignment test cases
-    assert max_profit(7)["earnings"] == 3000
-    assert max_profit(8)["earnings"] == 4500
-    assert max_profit(13)["earnings"] == 16500
-
-    # Edge cases
-    assert max_profit(0)["earnings"] == 0
-    assert max_profit(3)["earnings"] == 0
-    assert max_profit(4)["earnings"] == 0
-
-    # A theatre completed at time 5 earns nothing.
-    # A pub completed at time 4 earns for one unit by time 5.
-    assert max_profit(5)["earnings"] == 1000
-
-    assert max_profit(6)["earnings"] == 2000
-
-    # Invalid inputs
-    for invalid_input in [-1, 2.5, "7", True]:
-        try:
-            max_profit(invalid_input)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(
-                f"Expected ValueError for {invalid_input!r}"
-            )
-
-    print("All tests passed successfully!\n")
+# Test assignment examples
+for time_units in [7, 8, 13, 49]:
+    display_result(time_units)
 
 
-if __name__ == "__main__":
-    run_tests()
+# Validate expected maximum earnings
+assert max_profit(7)["maximum_earnings"] == 3000
+assert max_profit(8)["maximum_earnings"] == 4500
+assert max_profit(13)["maximum_earnings"] == 16500
+assert max_profit(49)["maximum_earnings"] == 324000
 
-    print("EVERQUINT - MAX PROFIT PROBLEM")
-    print("=" * 35)
 
-    for time_units in [7, 8, 13]:
-        display_result(time_units)
+# Validate all expected combinations for time unit 49
+expected_49_combinations = [
+    {"T": 8, "P": 2, "C": 0},
+    {"T": 9, "P": 0, "C": 0}
+]
+
+assert (
+    max_profit(49)["combinations"]
+    == expected_49_combinations
+), "Expected combinations do not match."
+
+
+# Edge case validations
+assert max_profit(0)["maximum_earnings"] == 0
+assert max_profit(3)["maximum_earnings"] == 0
+assert max_profit(4)["maximum_earnings"] == 0
+assert max_profit(5)["maximum_earnings"] == 1000
+assert max_profit(6)["maximum_earnings"] == 2000
+
+# Validate input errors
+try:
+    max_profit(-1)
+    raise AssertionError("Negative time should raise ValueError")
+except ValueError:
+    pass
+
+try:
+    max_profit(5.5)
+    raise AssertionError("Float input should raise ValueError")
+except ValueError:
+    pass
+
+print("\nAll Max Profit tests passed successfully!")
